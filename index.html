@@ -32,6 +32,13 @@
             <input type="text" id="word-input" 
                 class="w-full bg-transparent border-b-2 border-gray-600 focus:border-white outline-none text-center text-3xl pb-2 mb-8 transition-colors"
                 placeholder="在此输入魔法词..." autocomplete="off">
+
+            <div class="flex items-center justify-center gap-2 mb-4" aria-label="随机词难度">
+                <button type="button" data-difficulty="easy" class="difficulty-btn px-3 py-2 rounded-lg bg-gray-800 text-sm text-gray-400 border border-gray-700">简单</button>
+                <button type="button" data-difficulty="medium" class="difficulty-btn px-3 py-2 rounded-lg bg-white text-black text-sm border border-white" aria-pressed="true">中等</button>
+                <button type="button" data-difficulty="hard" class="difficulty-btn px-3 py-2 rounded-lg bg-gray-800 text-sm text-gray-400 border border-gray-700">困难</button>
+                <button type="button" id="btn-random-word" class="px-3 py-2 rounded-lg bg-gray-800 text-sm text-white border border-gray-600 active:scale-95 transition-transform" aria-label="随机抽取魔法词">🎲 随机词</button>
+            </div>
             
             <div class="flex-1 w-full flex items-center justify-center overflow-hidden min-h-[200px]">
                 <div id="word-display" class="font-bold text-center break-all leading-tight" style="font-size: 64px;"></div>
@@ -104,6 +111,8 @@
         
         const wordInput = document.getElementById('word-input');
         const wordDisplay = document.getElementById('word-display');
+        const randomWordButton = document.getElementById('btn-random-word');
+        const difficultyButtons = [...document.querySelectorAll('.difficulty-btn')];
         const btnFontMinus = document.getElementById('btn-font-minus');
         const btnFontPlus = document.getElementById('btn-font-plus');
         const btnStartDay = document.getElementById('btn-start-day');
@@ -129,11 +138,75 @@
         let timeRemaining = 0;
         let isPaused = false;
         let currentPhase = 'INPUT'; // 'INPUT', 'DAY', 'RESOLUTION'
+        let selectedDifficulty = 'medium';
+        let lastCueSecond = null;
+        let audioContext = null;
+
+        // Local, curated word bank. Keep the three levels independent for easy expansion.
+        const wordLists = {
+            easy: '苹果、香蕉、西瓜、草莓、葡萄、橙子、蛋糕、饼干、牛奶、咖啡、冰淇淋、披萨、汉堡、饺子、面条、米饭、筷子、雨伞、帽子、眼镜、书包、铅笔、橡皮、书本、桌子、椅子、沙发、床、枕头、窗户、门、钥匙、手机、电脑、相机、电视、电话、手表、钱包、鞋子、袜子、衣服、围巾、手套、自行车、汽车、公交车、火车、飞机、轮船、医院、学校、图书馆、公园、电影院、商店、超市、厨房、花园、海滩、山、河、太阳、月亮、星星、彩虹、云、雨、雪、风、火、树、花、草、猫、狗、兔子、熊猫、猴子、大象、狮子、老虎、企鹅、海豚、鱼、鸟、蝴蝶、蜜蜂、蚂蚁、蜘蛛、鸡、鸭、牛、羊、马、牛仔、警察、医生、老师、厨师、画家、歌手',
+            medium: '望远镜、指南针、放大镜、闹钟、收音机、耳机、麦克风、遥控器、充电宝、打印机、机器人、无人机、望远镜、保险箱、密码、地图、日历、日记本、明信片、邮票、信封、奖杯、礼物、气球、风筝、滑板、帐篷、睡袋、登山杖、救生圈、游泳镜、足球、篮球、网球、羽毛球、乒乓球、象棋、扑克牌、骰子、拼图、积木、魔方、秋千、跷跷板、过山车、旋转木马、摩天轮、城堡、宫殿、灯塔、火车站、机场、码头、十字路口、红绿灯、加油站、餐厅、面包店、咖啡馆、理发店、花店、博物馆、剧院、体育馆、游乐园、农场、沙漠、森林、瀑布、火山、冰川、珊瑚、海星、章鱼、螃蟹、长颈鹿、袋鼠、斑马、鳄鱼、乌龟、青蛙、蜗牛、孔雀、鹦鹉、啄木鸟、萤火虫、向日葵、仙人掌、竹子、松树、枫叶、蘑菇、土豆、玉米、胡萝卜、南瓜、草莓酱、巧克力、爆米花、棉花糖、蜂蜜',
+            hard: '天文望远镜、指南针玫瑰、沙漏、留声机、打字机、显微镜、万花筒、八音盒、怀表、风向标、气压计、温度计、地球仪、航海图、藏宝图、羊皮卷、印章、羽毛笔、调色板、素描本、望远镜架、救生艇、潜水服、滑翔伞、热气球、雪橇、独木舟、帆船、冲浪板、攀岩绳、露营灯、指南针、密码锁、保险柜、弹簧秤、天平、算盘、缝纫机、织布机、木琴、口琴、手风琴、三角铁、指挥棒、唱片机、投影仪、胶片、照相馆、天文台、气象站、植物园、动物园、古堡、钟楼、拱桥、地下室、阁楼、温室、观景台、海关、边境线、隧道、缆车、索道、邮轮、破冰船、灯塔岛、热带雨林、红树林、盐湖、峡谷、陨石坑、极光、流星雨、潮汐、海市蜃楼、珊瑚礁、鲸鱼、鲨鱼、海马、水母、变色龙、刺猬、树懒、犀牛、河马、火烈鸟、信天翁、猫头鹰、蝙蝠、独角兽、龙、凤凰、雪莲、含羞草、捕蝇草、银杏、竹笋、松果、榴莲、山竹、百香果、黑胡椒、肉桂、藏红花、抹茶、姜饼、马卡龙、提拉米苏、棉花糖机'
+        };
+        Object.keys(wordLists).forEach((level) => {
+            wordLists[level] = wordLists[level].split('、');
+        });
 
         // Constants
         const DAY_TIME = 240; // 4 minutes = 240 seconds
         const WEREWOLF_TIME = 15; // 15 seconds for werewolf to find seer
         const VILLAGER_TIME = 60; // 60 seconds to vote werewolf
+
+        const initAudio = () => {
+            if (!audioContext) {
+                const AudioCtor = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtor) audioContext = new AudioCtor();
+            }
+            if (audioContext?.state === 'suspended') audioContext.resume();
+        };
+
+        const playCue = (kind) => {
+            if (!audioContext) return;
+            const now = audioContext.currentTime;
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            oscillator.type = kind === 'end' ? 'sine' : 'triangle';
+            oscillator.frequency.setValueAtTime(kind === 'end' ? 660 : 760, now);
+            if (kind === 'end') oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.55);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(kind === 'end' ? 0.22 : 0.08, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + (kind === 'end' ? 0.65 : 0.12));
+            oscillator.connect(gain).connect(audioContext.destination);
+            oscillator.start(now);
+            oscillator.stop(now + (kind === 'end' ? 0.7 : 0.14));
+        };
+
+        const clearTimer = () => {
+            clearInterval(intervalId);
+            intervalId = null;
+            lastCueSecond = null;
+        };
+
+        const chooseRandomWord = () => {
+            const list = wordLists[selectedDifficulty];
+            const word = list[Math.floor(Math.random() * list.length)];
+            wordInput.value = word;
+            wordInput.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        difficultyButtons.forEach((button) => button.addEventListener('click', () => {
+            selectedDifficulty = button.dataset.difficulty;
+            difficultyButtons.forEach((item) => {
+                const active = item === button;
+                item.classList.toggle('bg-white', active);
+                item.classList.toggle('text-black', active);
+                item.classList.toggle('border-white', active);
+                item.classList.toggle('bg-gray-800', !active);
+                item.classList.toggle('text-gray-400', !active);
+                item.setAttribute('aria-pressed', String(active));
+            });
+        }));
+        randomWordButton.addEventListener('click', chooseRandomWord);
 
         wordInput.addEventListener('input', (e) => {
             const val = e.target.value;
@@ -178,7 +251,7 @@
         };
 
         const startTimer = (duration, displayElement, onComplete, showMinutes = true) => {
-            clearInterval(intervalId);
+            clearTimer();
             timeRemaining = duration;
             isPaused = false;
             displayElement.textContent = formatTime(timeRemaining, showMinutes);
@@ -187,9 +260,15 @@
                 if (!isPaused) {
                     timeRemaining--;
                     displayElement.textContent = formatTime(timeRemaining, showMinutes);
+
+                    if (timeRemaining > 0 && timeRemaining <= 10 && timeRemaining !== lastCueSecond) {
+                        lastCueSecond = timeRemaining;
+                        playCue('tick');
+                    }
                     
                     if (timeRemaining <= 0) {
-                        clearInterval(intervalId);
+                        clearTimer();
+                        playCue('end');
                         if (onComplete) onComplete();
                     }
                 }
@@ -197,6 +276,7 @@
         };
 
         btnStartDay.addEventListener('click', () => {
+            initAudio();
             if (wordInput.value.trim() === '') {
                 // Optional: Gentle shake effect if empty, but we'll just ignore for MVP or set a default.
                 wordInput.value = '未命名 (Unnamed)';
@@ -229,7 +309,7 @@
 
         btnGuessed.addEventListener('click', () => {
             // Guessed correctly!
-            clearInterval(intervalId);
+            clearTimer();
             startResolutionPhase('WEREWOLF');
         });
 
@@ -277,7 +357,7 @@
         };
 
         btnRestart.addEventListener('click', () => {
-            clearInterval(intervalId);
+            clearTimer();
             currentPhase = 'INPUT';
             
             // Reset state
