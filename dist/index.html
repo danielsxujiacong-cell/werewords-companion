@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>狼人真言 (Werewords) Timer MVP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Base styles to prevent pull-to-refresh and selection during gameplay */
+        body {
+            overscroll-behavior-y: contain;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        #btn-peek { touch-action: none; -webkit-user-select: none; user-select: none; }
+        
+        /* Smooth background transitions for the resolution phases */
+        #app-container {
+            transition: background-color 0.8s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans select-none overflow-hidden h-screen w-screen flex flex-col">
+
+    <div id="app-container" class="flex-1 w-full h-full flex flex-col relative">
+        
+        <!-- State 1: Input Phase -->
+        <div id="state-input" class="absolute inset-0 flex flex-col items-center justify-center p-6 w-full max-w-2xl mx-auto z-10 transition-opacity duration-300">
+            <h1 class="text-2xl text-gray-400 mb-8 font-light tracking-widest uppercase">夜晚阶段 (Night)</h1>
+            
+            <input type="text" id="word-input" 
+                class="w-full bg-transparent border-b-2 border-gray-600 focus:border-white outline-none text-center text-3xl pb-2 mb-8 transition-colors"
+                placeholder="在此输入魔法词..." autocomplete="off">
+            
+            <div class="flex-1 w-full flex items-center justify-center overflow-hidden min-h-[200px]">
+                <div id="word-display" class="font-bold text-center break-all leading-tight" style="font-size: 64px;"></div>
+            </div>
+
+            <div class="w-full flex flex-col gap-6 mt-8">
+                <div class="flex justify-center items-center gap-4">
+                    <button id="btn-font-minus" class="w-14 h-14 bg-gray-800 rounded-full text-2xl active:bg-gray-700 transition-colors flex items-center justify-center border border-gray-700 shadow-lg">
+                        -
+                    </button>
+                    <span class="text-gray-400 text-sm w-16 text-center">字号</span>
+                    <button id="btn-font-plus" class="w-14 h-14 bg-gray-800 rounded-full text-2xl active:bg-gray-700 transition-colors flex items-center justify-center border border-gray-700 shadow-lg">
+                        +
+                    </button>
+                </div>
+                <button id="btn-start-day" class="w-full py-5 bg-white text-black rounded-2xl text-2xl font-bold active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                    开始白天 (Start Day 4:00)
+                </button>
+            </div>
+        </div>
+
+        <!-- State 2: Day Phase -->
+        <div id="state-day" class="absolute inset-0 flex flex-col items-center justify-between py-12 px-6 w-full max-w-2xl mx-auto z-10 opacity-0 pointer-events-none transition-opacity duration-300 hidden">
+            <div class="flex-1 flex flex-col items-center justify-center w-full">
+                <div id="day-timer" class="text-[25vw] sm:text-9xl font-mono font-bold tabular-nums tracking-tighter">
+                    4:00
+                </div>
+                
+                <button id="btn-peek" class="mt-12 px-10 py-5 bg-gray-800 border-2 border-gray-700 rounded-full text-xl font-medium shadow-lg select-none relative overflow-hidden">
+                    <span class="pointer-events-none">长按偷看 (Press & Hold to Peek)</span>
+                </button>
+            </div>
+
+            <div class="w-full flex gap-4 mt-auto">
+                <button id="btn-pause" class="flex-1 py-4 bg-gray-800 rounded-2xl text-lg font-medium active:bg-gray-700 transition-colors">
+                    暂停 (Pause)
+                </button>
+                <button id="btn-guessed" class="flex-[2] py-4 bg-green-600 rounded-2xl text-xl font-bold active:bg-green-700 active:scale-[0.98] transition-all shadow-[0_0_15px_rgba(22,163,74,0.4)]">
+                    猜中了! (Guessed)
+                </button>
+            </div>
+        </div>
+
+        <!-- State 3: Resolution Phase -->
+        <div id="state-resolution" class="absolute inset-0 flex flex-col items-center justify-center p-6 w-full max-w-2xl mx-auto z-10 opacity-0 pointer-events-none transition-opacity duration-300 hidden text-center">
+            <h2 id="resolution-title" class="text-3xl sm:text-5xl font-bold mb-4 drop-shadow-lg"></h2>
+            <p id="resolution-subtitle" class="text-lg text-white/80 mb-12 uppercase tracking-wide"></p>
+            
+            <div id="resolution-timer" class="text-[30vw] sm:text-[10rem] font-mono font-bold tabular-nums tracking-tighter mb-16 drop-shadow-xl">
+                15
+            </div>
+
+            <button id="btn-restart" class="w-full sm:w-2/3 py-5 bg-white text-black rounded-2xl text-2xl font-bold active:scale-[0.98] transition-transform shadow-2xl">
+                重新开始 (Restart)
+            </button>
+        </div>
+
+        <!-- Peek Overlay (Full Screen to avoid thumbs blocking text) -->
+        <div id="peek-overlay" class="absolute inset-0 bg-black/95 z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-200">
+            <div id="peek-word-display" class="font-bold text-center break-all px-4 text-white leading-tight" style="font-size: 64px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const appContainer = document.getElementById('app-container');
+        const stateInput = document.getElementById('state-input');
+        const stateDay = document.getElementById('state-day');
+        const stateResolution = document.getElementById('state-resolution');
+        
+        const wordInput = document.getElementById('word-input');
+        const wordDisplay = document.getElementById('word-display');
+        const btnFontMinus = document.getElementById('btn-font-minus');
+        const btnFontPlus = document.getElementById('btn-font-plus');
+        const btnStartDay = document.getElementById('btn-start-day');
+        
+        const dayTimer = document.getElementById('day-timer');
+        const btnPeek = document.getElementById('btn-peek');
+        const peekOverlay = document.getElementById('peek-overlay');
+        const peekWordDisplay = document.getElementById('peek-word-display');
+        const btnPause = document.getElementById('btn-pause');
+        const btnGuessed = document.getElementById('btn-guessed');
+        
+        const resolutionTitle = document.getElementById('resolution-title');
+        const resolutionSubtitle = document.getElementById('resolution-subtitle');
+        const resolutionTimerDisplay = document.getElementById('resolution-timer');
+        const btnRestart = document.getElementById('btn-restart');
+
+        // State Variables
+        let currentFontSize = 64;
+        const MIN_FONT = 24;
+        const MAX_FONT = 200;
+        
+        let intervalId = null;
+        let timeRemaining = 0;
+        let isPaused = false;
+        let currentPhase = 'INPUT'; // 'INPUT', 'DAY', 'RESOLUTION'
+
+        // Constants
+        const DAY_TIME = 240; // 4 minutes = 240 seconds
+        const WEREWOLF_TIME = 15; // 15 seconds for werewolf to find seer
+        const VILLAGER_TIME = 60; // 60 seconds to vote werewolf
+
+        wordInput.addEventListener('input', (e) => {
+            const val = e.target.value;
+            wordDisplay.textContent = val;
+            peekWordDisplay.textContent = val;
+        });
+
+        const updateFontSize = (delta) => {
+            currentFontSize += delta;
+            if (currentFontSize < MIN_FONT) currentFontSize = MIN_FONT;
+            if (currentFontSize > MAX_FONT) currentFontSize = MAX_FONT;
+            wordDisplay.style.fontSize = `${currentFontSize}px`;
+            peekWordDisplay.style.fontSize = `${currentFontSize}px`;
+        };
+
+        btnFontMinus.addEventListener('click', () => updateFontSize(-8));
+        btnFontPlus.addEventListener('click', () => updateFontSize(8));
+
+        // Helper: Format Time (MM:SS or SS)
+        const formatTime = (seconds, showMinutes = true) => {
+            if (!showMinutes) return seconds.toString();
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+
+        const switchView = (hideView, showView) => {
+            // Fade out
+            hideView.classList.remove('opacity-100');
+            hideView.classList.add('opacity-0');
+            hideView.classList.add('pointer-events-none');
+            
+            setTimeout(() => {
+                hideView.classList.add('hidden');
+                showView.classList.remove('hidden');
+                // Force reflow
+                void showView.offsetWidth;
+                // Fade in
+                showView.classList.remove('opacity-0', 'pointer-events-none');
+                showView.classList.add('opacity-100');
+            }, 300); // matches duration-300
+        };
+
+        const startTimer = (duration, displayElement, onComplete, showMinutes = true) => {
+            clearInterval(intervalId);
+            timeRemaining = duration;
+            isPaused = false;
+            displayElement.textContent = formatTime(timeRemaining, showMinutes);
+
+            intervalId = setInterval(() => {
+                if (!isPaused) {
+                    timeRemaining--;
+                    displayElement.textContent = formatTime(timeRemaining, showMinutes);
+                    
+                    if (timeRemaining <= 0) {
+                        clearInterval(intervalId);
+                        if (onComplete) onComplete();
+                    }
+                }
+            }, 1000);
+        };
+
+        btnStartDay.addEventListener('click', () => {
+            if (wordInput.value.trim() === '') {
+                // Optional: Gentle shake effect if empty, but we'll just ignore for MVP or set a default.
+                wordInput.value = '未命名 (Unnamed)';
+                wordDisplay.textContent = wordInput.value;
+                peekWordDisplay.textContent = wordInput.value;
+            }
+            
+            currentPhase = 'DAY';
+            btnPause.textContent = '暂停 (Pause)';
+            switchView(stateInput, stateDay);
+            appContainer.className = 'flex-1 w-full h-full flex flex-col relative bg-gray-900'; // Reset bg
+            
+            startTimer(DAY_TIME, dayTimer, () => {
+                // Time ran out (Villagers failed to guess)
+                startResolutionPhase('VILLAGER');
+            });
+        });
+
+        btnPause.addEventListener('click', () => {
+            isPaused = !isPaused;
+            btnPause.textContent = isPaused ? '继续 (Resume)' : '暂停 (Pause)';
+            if(isPaused) {
+                btnPause.classList.remove('bg-gray-800');
+                btnPause.classList.add('bg-yellow-600', 'text-white');
+            } else {
+                btnPause.classList.remove('bg-yellow-600', 'text-white');
+                btnPause.classList.add('bg-gray-800');
+            }
+        });
+
+        btnGuessed.addEventListener('click', () => {
+            // Guessed correctly!
+            clearInterval(intervalId);
+            startResolutionPhase('WEREWOLF');
+        });
+
+        const showPeek = (e) => {
+            if (e) e.preventDefault();
+            if (e?.pointerId != null && btnPeek.setPointerCapture) {
+                try { btnPeek.setPointerCapture(e.pointerId); } catch (_) {}
+            }
+            peekOverlay.classList.remove('opacity-0', 'pointer-events-none');
+        };
+
+        const hidePeek = (e) => {
+            if(e) e.preventDefault();
+            peekOverlay.classList.add('opacity-0', 'pointer-events-none');
+            if (e?.pointerId != null && btnPeek.releasePointerCapture) {
+                try { btnPeek.releasePointerCapture(e.pointerId); } catch (_) {}
+            }
+        };
+
+        // Using Pointer Events covers Mouse and Touch uniformly
+        btnPeek.addEventListener('pointerdown', showPeek);
+        btnPeek.addEventListener('pointerup', hidePeek);
+        btnPeek.addEventListener('pointercancel', hidePeek);
+        btnPeek.addEventListener('pointerleave', hidePeek);
+        btnPeek.addEventListener('lostpointercapture', hidePeek);
+        btnPeek.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent mobile long-press menu
+
+        const startResolutionPhase = (type) => {
+            currentPhase = 'RESOLUTION';
+            switchView(stateDay, stateResolution);
+            
+            if (type === 'WEREWOLF') {
+                // Guessed correctly: Werewolf finds Seer (Red Theme)
+                appContainer.className = 'flex-1 w-full h-full flex flex-col relative bg-red-900 text-white';
+                resolutionTitle.textContent = '狼人请指认先知';
+                resolutionSubtitle.textContent = 'Werewolf, identify the Seer';
+                startTimer(WEREWOLF_TIME, resolutionTimerDisplay, null, false);
+            } else {
+                // Time ran out: Vote for Werewolf (Blue Theme)
+                appContainer.className = 'flex-1 w-full h-full flex flex-col relative bg-blue-900 text-white';
+                resolutionTitle.textContent = '请投票找出狼人';
+                resolutionSubtitle.textContent = 'Vote for the Werewolf';
+                startTimer(VILLAGER_TIME, resolutionTimerDisplay, null, false);
+            }
+        };
+
+        btnRestart.addEventListener('click', () => {
+            clearInterval(intervalId);
+            currentPhase = 'INPUT';
+            
+            // Reset state
+            wordInput.value = '';
+            wordDisplay.textContent = '';
+            peekWordDisplay.textContent = '';
+            appContainer.className = 'flex-1 w-full h-full flex flex-col relative bg-gray-900 transition-colors duration-800 text-white';
+            
+            // Reset Pause Button
+            isPaused = false;
+            btnPause.textContent = '暂停 (Pause)';
+            btnPause.classList.remove('bg-yellow-600', 'text-white');
+            btnPause.classList.add('bg-gray-800');
+
+            switchView(stateResolution, stateInput);
+            
+            // Auto focus input on restart (mostly for desktop, disabled on mobile to prevent immediate keyboard pop-up)
+            if(window.innerWidth > 768) {
+                setTimeout(() => wordInput.focus(), 400);
+            }
+        });
+
+    </script>
+</body>
+</html>
