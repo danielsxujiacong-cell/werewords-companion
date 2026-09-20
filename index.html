@@ -19,11 +19,25 @@
         #app-container {
             transition: background-color 0.8s ease-in-out;
         }
+
+        #about-modal.is-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #about-modal.is-open #about-dialog {
+            transform: scale(1);
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans select-none overflow-hidden h-screen w-screen flex flex-col">
 
     <div id="app-container" class="flex-1 w-full h-full flex flex-col relative">
+
+        <button id="btn-about" type="button" aria-label="关于本工具"
+            class="absolute top-4 right-4 z-40 w-10 h-10 rounded-full bg-gray-800/60 text-gray-400 border border-gray-700/70 text-lg transition-colors hover:bg-gray-700/80 hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500">
+            ℹ️
+        </button>
         
         <!-- State 1: Input Phase -->
         <div id="state-input" class="absolute inset-0 flex flex-col items-center justify-center p-6 w-full max-w-2xl mx-auto z-10 transition-opacity duration-300">
@@ -100,6 +114,26 @@
         <div id="peek-overlay" class="absolute inset-0 bg-black/95 z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-200">
             <div id="peek-word-display" class="font-bold text-center break-all px-4 text-white leading-tight" style="font-size: 64px;"></div>
         </div>
+
+        <!-- About Modal -->
+        <div id="about-modal" class="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 p-5 opacity-0 pointer-events-none transition-opacity duration-200" role="dialog" aria-modal="true" aria-labelledby="about-title">
+            <div id="about-dialog" class="relative w-[min(90vw,420px)] max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-700 bg-gray-900 px-6 py-7 text-center shadow-2xl transition-transform duration-200 scale-95">
+                <button id="btn-close-about" type="button" aria-label="关闭关于窗口" class="absolute right-3 top-2 text-2xl leading-none text-gray-500 transition-colors hover:text-gray-200">×</button>
+                <h2 id="about-title" class="mb-4 text-2xl font-medium text-white">关于本工具</h2>
+                <p class="mx-auto max-w-sm text-sm leading-7 text-gray-300">本项目由 B 站 UP 主 Daniel 独立制作。<br>如果这个计时器提升了你们的桌游体验，欢迎请作者喝杯咖啡，或者加入交流群与大家讨论桌游与工具更新！</p>
+                <div class="mt-6 flex justify-center gap-5 sm:gap-8">
+                    <div class="flex w-32 flex-col items-center gap-2 text-sm text-gray-300">
+                        <img src="reward.png" alt="请喝咖啡二维码" class="h-[120px] w-[120px] object-contain">
+                        <span>☕ 请喝咖啡</span>
+                    </div>
+                    <div class="flex w-32 flex-col items-center gap-2 text-sm text-gray-300">
+                        <img src="group.png" alt="微信交流群二维码" class="h-[120px] w-[120px] object-contain">
+                        <span>💬 微信交流群</span>
+                    </div>
+                </div>
+                <p class="mt-7 text-xs text-gray-500">Made by Daniel</p>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -116,6 +150,9 @@
         const btnFontMinus = document.getElementById('btn-font-minus');
         const btnFontPlus = document.getElementById('btn-font-plus');
         const btnStartDay = document.getElementById('btn-start-day');
+        const btnAbout = document.getElementById('btn-about');
+        const aboutModal = document.getElementById('about-modal');
+        const btnCloseAbout = document.getElementById('btn-close-about');
         
         const dayTimer = document.getElementById('day-timer');
         const btnPeek = document.getElementById('btn-peek');
@@ -128,6 +165,25 @@
         const resolutionSubtitle = document.getElementById('resolution-subtitle');
         const resolutionTimerDisplay = document.getElementById('resolution-timer');
         const btnRestart = document.getElementById('btn-restart');
+
+        const openAbout = () => {
+            aboutModal.classList.add('is-open');
+            btnCloseAbout.focus();
+        };
+
+        const closeAbout = () => {
+            aboutModal.classList.remove('is-open');
+            btnAbout.focus();
+        };
+
+        btnAbout.addEventListener('click', openAbout);
+        btnCloseAbout.addEventListener('click', closeAbout);
+        aboutModal.addEventListener('click', (event) => {
+            if (event.target === aboutModal) closeAbout();
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && aboutModal.classList.contains('is-open')) closeAbout();
+        });
 
         // State Variables
         let currentFontSize = 64;
