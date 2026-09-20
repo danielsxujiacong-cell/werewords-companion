@@ -174,7 +174,8 @@
             oscillator.frequency.setValueAtTime(kind === 'end' ? 660 : 760, now);
             if (kind === 'end') oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.55);
             gain.gain.setValueAtTime(0.0001, now);
-            gain.gain.exponentialRampToValueAtTime(kind === 'end' ? 0.22 : 0.08, now + 0.015);
+            // Keep the envelope below unity while raising the existing cue levels by about 4x.
+            gain.gain.exponentialRampToValueAtTime(kind === 'end' ? 0.88 : 0.32, now + 0.015);
             gain.gain.exponentialRampToValueAtTime(0.0001, now + (kind === 'end' ? 0.65 : 0.12));
             oscillator.connect(gain).connect(audioContext.destination);
             oscillator.start(now);
@@ -276,14 +277,14 @@
         };
 
         btnStartDay.addEventListener('click', () => {
-            initAudio();
             if (wordInput.value.trim() === '') {
-                // Optional: Gentle shake effect if empty, but we'll just ignore for MVP or set a default.
-                wordInput.value = '未命名 (Unnamed)';
-                wordDisplay.textContent = wordInput.value;
-                peekWordDisplay.textContent = wordInput.value;
+                wordInput.focus();
+                window.alert('请先输入魔法词');
+                return;
             }
-            
+
+            initAudio();
+
             currentPhase = 'DAY';
             btnPause.textContent = '暂停 (Pause)';
             switchView(stateInput, stateDay);
